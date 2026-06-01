@@ -1,0 +1,11 @@
+streamlit
+pandas
+pillow
+python-dateutil
+qrcode
+reportlab
+openpyxl
+arabic-reshaper
+python-bidi
+pymupdf
+python-docx
