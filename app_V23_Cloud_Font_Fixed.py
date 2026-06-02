@@ -53,22 +53,50 @@ SYSTEM_FONT_OPTIONS = {
     "FreeSans": ["/usr/share/fonts/truetype/freefont/FreeSans.ttf"],
 }
 
+FONT_ALIASES = {
+    "Amiri Regular": ["Amiri-Regular.ttf", "Amiri Regular.ttf"],
+    "Amiri Bold": ["Amiri-Bold.ttf", "Amiri Bold.ttf", "Amiri-Bold (1).ttf"],
+    "Amiri Italic": ["Amiri-Italic.ttf"],
+    "Amiri BoldItalic": ["Amiri-BoldItalic.ttf"],
+    "Tajawal Regular": ["Tajawal-Regular.ttf"],
+    "Tajawal Medium": ["Tajawal-Medium.ttf"],
+    "Tajawal Bold": ["Tajawal-Bold.ttf", "Tajawal-Bold (1).ttf"],
+    "Tajawal ExtraBold": ["Tajawal-ExtraBold.ttf"],
+    "Tajawal Black": ["Tajawal-Black.ttf"],
+    "Tajawal Light": ["Tajawal-Light.ttf"],
+    "Tajawal ExtraLight": ["Tajawal-ExtraLight.ttf"],
+    "Noto Naskh Arabic Regular": ["NotoNaskhArabic-Regular.ttf", "NotoNaskhArabic-VariableFont_wght.ttf"],
+    "Noto Naskh Arabic Bold": ["NotoNaskhArabic-Bold.ttf", "NotoNaskhArabic-VariableFont_wght.ttf"],
+    "Cairo Regular": ["Cairo-Regular.ttf", "Cairo-VariableFont_slnt,wght.ttf"],
+    "Cairo Bold": ["Cairo-Bold.ttf", "Cairo-VariableFont_slnt,wght.ttf"],
+    "Jomhuria Regular": ["Jomhuria-Regular.ttf"],
+    "Cairoline": ["Cairoline.ttf"],
+}
+
 FONT_OPTIONS = SYSTEM_FONT_OPTIONS.copy()
 
-st.set_page_config(page_title="منصة شهادات الخبرة V22 Print Image", page_icon="🏆", layout="wide")
+st.set_page_config(page_title="منصة شهادات الخبرة V23 Cloud Font Fixed", page_icon="🏆", layout="wide")
 
 
 # ---------------------- أدوات عامة ----------------------
 def scan_project_fonts():
-    """يقرأ أي ملفات خطوط TTF/OTF داخل assets/fonts تلقائياً."""
+    """يقرأ أي ملفات خطوط TTF/OTF داخل assets/fonts تلقائياً مع أسماء ودّية متوافقة مع القوالب."""
     fonts = {}
     if FONT_DIR.exists():
+        for label, filenames in FONT_ALIASES.items():
+            paths = []
+            for fn in filenames:
+                p = FONT_DIR / fn
+                if p.exists():
+                    paths.append(str(p))
+            if paths:
+                fonts[label] = paths
+
         for p in sorted(list(FONT_DIR.glob("*.ttf")) + list(FONT_DIR.glob("*.otf"))):
-            label = p.stem
-            # تنظيف أسماء شائعة لتظهر بشكل جميل
-            label = label.replace("-", " ").replace("_", " ")
+            label = p.stem.replace("-", " ").replace("_", " ")
             label = re.sub(r"\s+", " ", label).strip()
-            fonts[label] = [str(p)]
+            if label not in fonts:
+                fonts[label] = [str(p)]
     return fonts
 
 def get_font_options():
@@ -79,7 +107,14 @@ def get_font_options():
 
 def available_font_labels():
     opts = get_font_options()
-    preferred = ["Tajawal Bold", "Tajawal Regular", "Cairo Bold", "Cairo Regular", "Noto Naskh Arabic Bold", "Noto Naskh Arabic Regular", "Amiri Bold", "Amiri Regular"]
+    preferred = [
+        "Tajawal Regular", "Tajawal Medium", "Tajawal Bold", "Tajawal ExtraBold",
+        "Amiri Regular", "Amiri Bold",
+        "Noto Naskh Arabic Regular", "Noto Naskh Arabic Bold",
+        "Cairo Regular", "Cairo Bold",
+        "Jomhuria Regular",
+        "DejaVu Sans",
+    ]
     labels = []
     for label in preferred:
         if label in opts and any(os.path.exists(p) for p in opts[label]):
@@ -87,31 +122,118 @@ def available_font_labels():
     for label, paths in opts.items():
         if label not in labels and any(os.path.exists(p) for p in paths):
             labels.append(label)
-    return labels or ["Arial"]
+    return labels or ["DejaVu Sans"]
 
-def find_font(label="Arial"):
-    opts = get_font_options()
-    candidates = opts.get(label, []) + opts.get("Arial", []) + opts.get("Tahoma", [])
+def _font_path_from_candidates(candidates):
     for p in candidates:
-        if os.path.exists(p):
-            return p
+        if p and os.path.exists(str(p)):
+            return str(p)
     return None
 
+def find_font(label="Arial"):
+    """بحث ذكي عن الخط يمنع الرجوع إلى Helvetica قدر الإمكان."""
+    opts = get_font_options()
+
+    direct = _font_path_from_candidates(opts.get(label, []))
+    if direct:
+        return direct
+
+    label_low = str(label or "").lower().replace("-", " ").replace("_", " ")
+
+    for name, paths in opts.items():
+        name_low = name.lower().replace("-", " ").replace("_", " ")
+        if label_low and (label_low in name_low or name_low in label_low):
+            found = _font_path_from_candidates(paths)
+            if found:
+                return found
+
+    if "tajawal" in label_low:
+        families = ["tajawal", "amiri", "noto", "cairo", "dejavu"]
+    elif "amiri" in label_low:
+        families = ["amiri", "tajawal", "noto", "cairo", "dejavu"]
+    elif "noto" in label_low or "naskh" in label_low:
+        families = ["noto", "amiri", "tajawal", "cairo", "dejavu"]
+    elif "cairo" in label_low:
+        families = ["cairo", "tajawal", "amiri", "noto", "dejavu"]
+    elif "jomhuria" in label_low:
+        families = ["jomhuria", "amiri", "tajawal", "noto", "dejavu"]
+    else:
+        families = ["tajawal", "amiri", "noto", "cairo", "jomhuria", "dejavu"]
+
+    for family in families:
+        for name, paths in opts.items():
+            if family in name.lower():
+                found = _font_path_from_candidates(paths)
+                if found:
+                    return found
+
+    for fallback in [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+        "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
+    ]:
+        if os.path.exists(fallback):
+            return fallback
+
+    return None
+
+def _safe_reportlab_font_name(label, suffix=""):
+    base = re.sub(r"[^A-Za-z0-9_]", "_", str(label or "ArabicFont"))
+    return (base[:42] + suffix) or ("ArabicFont" + suffix)
+
 def register_font(label="Arial"):
-    safe = re.sub(r"[^A-Za-z0-9_]", "_", label)[:24] or "Default"
-    regular = f"F_{safe}"
-    bold = f"FB_{safe}"
+    """
+    تسجيل خط ReportLab مع منع الرجوع إلى Helvetica؛ لأن Helvetica لا يدعم العربية.
+    إذا فشل الخط المطلوب نستخدم أفضل خط عربي متاح.
+    """
+    regular_name = _safe_reportlab_font_name(label, "_R")
+    bold_name = _safe_reportlab_font_name(label, "_B")
+
     path = find_font(label)
     if path:
         try:
-            if regular not in pdfmetrics.getRegisteredFontNames():
-                pdfmetrics.registerFont(TTFont(regular, path))
-            if bold not in pdfmetrics.getRegisteredFontNames():
-                pdfmetrics.registerFont(TTFont(bold, path))
-            return regular, bold
+            if regular_name not in pdfmetrics.getRegisteredFontNames():
+                pdfmetrics.registerFont(TTFont(regular_name, path))
+            if bold_name not in pdfmetrics.getRegisteredFontNames():
+                pdfmetrics.registerFont(TTFont(bold_name, path))
+            return regular_name, bold_name
         except Exception:
             pass
+
+    fallback_path = find_font("DejaVu Sans")
+    if fallback_path:
+        try:
+            if "DejaVuSansArabicSafe" not in pdfmetrics.getRegisteredFontNames():
+                pdfmetrics.registerFont(TTFont("DejaVuSansArabicSafe", fallback_path))
+            return "DejaVuSansArabicSafe", "DejaVuSansArabicSafe"
+        except Exception:
+            pass
+
     return "Helvetica", "Helvetica-Bold"
+
+def apply_cloud_safe_default_fonts():
+    """يحوّل القالب الحالي تلقائياً من Tahoma/Arial إلى خطوط عربية مرفوعة على GitHub."""
+    if st.session_state.get("_cloud_fonts_applied"):
+        return
+
+    available = available_font_labels()
+    body_font = choose_font("Tajawal Regular", "Amiri Regular", available)
+    bold_font = choose_font("Tajawal Bold", "Amiri Bold", available)
+    name_font = choose_font("Amiri Bold", bold_font, available)
+
+    for key in ["intro", "contribution", "issued", "legal", "date_label", "qr_label"]:
+        if key in st.session_state.layout and st.session_state.layout[key].get("font") in ["Tahoma", "Arial", "Helvetica"]:
+            st.session_state.layout[key]["font"] = body_font
+
+    for key in ["heading", "period", "org", "issue_date", "certificate_no"]:
+        if key in st.session_state.layout and st.session_state.layout[key].get("font") in ["Tahoma", "Arial", "Helvetica"]:
+            st.session_state.layout[key]["font"] = bold_font
+
+    if "name" in st.session_state.layout and st.session_state.layout["name"].get("font") in ["Tahoma", "Arial", "Helvetica"]:
+        st.session_state.layout["name"]["font"] = name_font
+
+    st.session_state["_cloud_fonts_applied"] = True
 
 def rtl(text):
     text = "" if text is None else str(text)
@@ -425,6 +547,7 @@ def ensure_state():
         st.session_state.layout = json.loads(json.dumps(DEFAULT_LAYOUT))
     if "texts_template" not in st.session_state:
         st.session_state.texts_template = DEFAULT_TEXTS.copy()
+    apply_cloud_safe_default_fonts()
 
 def render_texts(values):
     title = values.get("gender_title", "السيد")
@@ -1184,8 +1307,8 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
-    st.title("🏆 منصة شهادات الخبرة - V22 Print Image Center")
-    st.caption("نسخة طباعة محسنة: طباعة من صورة مولّدة من PDF بدل iframe حتى لا تظهر الطباعة فارغة.")
+    st.title("🏆 منصة شهادات الخبرة - V23 Cloud Font Fixed")
+    st.caption("نسخة سحابية محسنة: إصلاح الخطوط العربية على Streamlit Cloud + PDF + Word + طباعة + إصدار جماعي.")
 
     tab_issue, tab_bg, tab_templates, tab_log = st.tabs(["🧾 إصدار شهادة", "🖼️ الخلفيات", "💾 القوالب", "📚 السجل"])
 
@@ -1506,7 +1629,7 @@ def main():
 
         st.divider()
         st.subheader("الخطوط")
-        st.info("ضع ملفات الخطوط بصيغة TTF أو OTF داخل assets/fonts ثم أعد تشغيل المنصة، وستظهر تلقائياً في قائمة الخطوط.")
+        st.info("ضع ملفات الخطوط بصيغة TTF أو OTF داخل assets/fonts. النسخة V23 تختار خطاً عربياً آمناً تلقائياً عند النشر على Streamlit Cloud.")
         if FONT_DIR.exists():
             current_fonts = sorted([p.name for p in FONT_DIR.glob("*.ttf")] + [p.name for p in FONT_DIR.glob("*.otf")])
             if current_fonts:
