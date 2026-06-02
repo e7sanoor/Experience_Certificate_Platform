@@ -75,7 +75,7 @@ FONT_ALIASES = {
 
 FONT_OPTIONS = SYSTEM_FONT_OPTIONS.copy()
 
-st.set_page_config(page_title="منصة شهادات الخبرة V23 Cloud Font Fixed", page_icon="🏆", layout="wide")
+st.set_page_config(page_title="منصة شهادات الخبرة V24 Arabic Stable", page_icon="🏆", layout="wide")
 
 
 # ---------------------- أدوات عامة ----------------------
@@ -108,8 +108,8 @@ def get_font_options():
 def available_font_labels():
     opts = get_font_options()
     preferred = [
-        "Tajawal Regular", "Tajawal Medium", "Tajawal Bold", "Tajawal ExtraBold",
         "Amiri Regular", "Amiri Bold",
+        "Tajawal Regular", "Tajawal Medium", "Tajawal Bold", "Tajawal ExtraBold",
         "Noto Naskh Arabic Regular", "Noto Naskh Arabic Bold",
         "Cairo Regular", "Cairo Bold",
         "Jomhuria Regular",
@@ -213,30 +213,56 @@ def register_font(label="Arial"):
     return "Helvetica", "Helvetica-Bold"
 
 def apply_cloud_safe_default_fonts():
-    """يحوّل القالب الحالي تلقائياً من Tahoma/Arial إلى خطوط عربية مرفوعة على GitHub."""
+    """
+    يفرض خطوطاً عربية مستقرة على PDF.
+    سبب ذلك: بعض الخطوط مثل Tajawal/Variable Fonts قد تعرض مربعات عند استخدام arabic_reshaper مع ReportLab.
+    Amiri أكثر ثباتاً مع الحروف العربية المشكلة داخل PDF.
+    """
     if st.session_state.get("_cloud_fonts_applied"):
         return
 
     available = available_font_labels()
-    body_font = choose_font("Tajawal Regular", "Amiri Regular", available)
-    bold_font = choose_font("Tajawal Bold", "Amiri Bold", available)
+    body_font = choose_font("Amiri Regular", "DejaVu Sans", available)
+    bold_font = choose_font("Amiri Bold", body_font, available)
     name_font = choose_font("Amiri Bold", bold_font, available)
 
     for key in ["intro", "contribution", "issued", "legal", "date_label", "qr_label"]:
-        if key in st.session_state.layout and st.session_state.layout[key].get("font") in ["Tahoma", "Arial", "Helvetica"]:
+        if key in st.session_state.layout:
             st.session_state.layout[key]["font"] = body_font
 
     for key in ["heading", "period", "org", "issue_date", "certificate_no"]:
-        if key in st.session_state.layout and st.session_state.layout[key].get("font") in ["Tahoma", "Arial", "Helvetica"]:
+        if key in st.session_state.layout:
             st.session_state.layout[key]["font"] = bold_font
 
-    if "name" in st.session_state.layout and st.session_state.layout["name"].get("font") in ["Tahoma", "Arial", "Helvetica"]:
+    if "name" in st.session_state.layout:
         st.session_state.layout["name"]["font"] = name_font
 
     st.session_state["_cloud_fonts_applied"] = True
 
-def rtl(text):
+def clean_text_for_pdf(text):
+    """
+    تنظيف محارف مخفية أو غير مدعومة تسبب ظهور مربعات داخل PDF.
+    """
     text = "" if text is None else str(text)
+    replacements = {
+        "\u200b": "",
+        "\u200c": "",
+        "\u200d": "",
+        "\u200e": "",
+        "\u200f": "",
+        "\ufeff": "",
+        "\u061c": "",
+        "\u00a0": " ",
+        "□": "",
+        "�": "",
+    }
+    for a, b in replacements.items():
+        text = text.replace(a, b)
+    text = re.sub(r"[ \t]+", " ", text)
+    return text.strip()
+
+def rtl(text):
+    text = clean_text_for_pdf(text)
     if arabic_reshaper and get_display:
         try:
             return get_display(arabic_reshaper.reshape(text))
@@ -455,9 +481,9 @@ DEFAULT_LAYOUT = {
 
 STYLE_PRESETS = {
     "🏆 Manahil Official": {
-        "font_regular": "Tajawal Regular",
-        "font_bold": "Tajawal Bold",
-        "fallback": "Tahoma",
+        "font_regular": "Amiri Regular",
+        "font_bold": "Amiri Bold",
+        "fallback": "DejaVu Sans",
         "updates": {
             "heading": {"size": 30, "y": 340, "color": "#111111", "bold": True, "line_h": 34, "w": 520},
             "intro": {"size": 13.8, "y": 302, "line_h": 18, "w": 660},
@@ -585,8 +611,8 @@ def auto_layout_manahil(values=None, available=None):
         available = available_font_labels()
 
     # اختيار أفضل خط متاح
-    regular = choose_font("Tajawal Regular", "Tahoma", available)
-    bold = choose_font("Tajawal Bold", regular, available)
+    regular = choose_font("Amiri Regular", "DejaVu Sans", available)
+    bold = choose_font("Amiri Bold", regular, available)
 
     L = st.session_state.layout
 
@@ -647,8 +673,8 @@ def auto_layout_flow(values=None, available=None):
     if available is None:
         available = available_font_labels()
 
-    regular = choose_font("Tajawal Regular", "Tahoma", available)
-    bold = choose_font("Tajawal Bold", regular, available)
+    regular = choose_font("Amiri Regular", "DejaVu Sans", available)
+    bold = choose_font("Amiri Bold", regular, available)
     L = st.session_state.layout
 
     # إعدادات من session_state أو افتراضية
@@ -758,7 +784,7 @@ def preview_html(bg_path, texts, values, logo_path="", stamp_path="", sign_path=
             continue
         if key == "qr_label" and not values.get("show_qr"):
             continue
-        text = html.escape(texts.get(key, ""))
+        text = html.escape(clean_text_for_pdf(texts.get(key, "")))
         left = item.get("x", 0) * s
         top = (PAGE_H - item.get("y", 0)) * s
         w = item.get("w", 200) * s
@@ -830,6 +856,7 @@ def draw_text_block(c, key, text):
     x = float(item.get("x", PAGE_W/2))
     y = float(item.get("y", PAGE_H/2))
     align = item.get("align", "center")
+    text = clean_text_for_pdf(text)
     lines = wrap_by_chars(text, int(item.get("chars", 90)))
     for line in lines:
         shaped = rtl(line)
@@ -1307,8 +1334,8 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
-    st.title("🏆 منصة شهادات الخبرة - V23 Cloud Font Fixed")
-    st.caption("نسخة سحابية محسنة: إصلاح الخطوط العربية على Streamlit Cloud + PDF + Word + طباعة + إصدار جماعي.")
+    st.title("🏆 منصة شهادات الخبرة - V24 Arabic Stable")
+    st.caption("نسخة مستقرة للعربية: اعتماد Amiri كخط PDF أساسي + تنظيف المحارف المخفية + إصلاح ظهور المربعات.")
 
     tab_issue, tab_bg, tab_templates, tab_log = st.tabs(["🧾 إصدار شهادة", "🖼️ الخلفيات", "💾 القوالب", "📚 السجل"])
 
